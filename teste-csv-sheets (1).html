@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teste CSV — Google Sheets</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --ml-yellow:#FFE600;--bg:#F0F2F5;--s1:#FFFFFF;--br:#E0E3EA;
+    --t1:#1A1A2E;--t3:#6B7280;--green:#00A650;--red:#E53935;
+  }
+  body{background:var(--bg);color:var(--t1);font-family:system-ui,-apple-system,sans-serif;padding:20px}
+  header{background:var(--ml-yellow);border-radius:10px;padding:16px 20px;margin-bottom:18px}
+  header h1{font-size:16px}
+  header small{color:#5a4f00;display:block;margin-top:4px;word-break:break-all}
+  #status{font-size:13px;margin-bottom:12px;padding:10px 14px;border-radius:8px;background:var(--s1);border:1px solid var(--br)}
+  #status.ok{color:var(--green);font-weight:600}
+  #status.err{color:var(--red);font-weight:600}
+  .table-wrap{overflow-x:auto;background:var(--s1);border:1px solid var(--br);border-radius:10px}
+  table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--br);text-align:left}
+  th{background:#F5F6FA;position:sticky;top:0;font-weight:700;color:var(--t3);text-transform:uppercase;font-size:10px;letter-spacing:.03em}
+  tr:hover td{background:#fffbe6}
+  #meta{font-size:11px;color:var(--t3);margin-top:8px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔍 Teste de conexão — CSV Google Sheets</h1>
+  <small id="url-display"></small>
+</header>
+
+<div id="status">Carregando...</div>
+<div class="table-wrap">
+  <table id="tbl"><thead></thead><tbody></tbody></table>
+</div>
+<div id="meta"></div>
+
+<script>
+// Troque essa URL pela sua se precisar testar outra planilha/aba publicada como CSV
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSdQXnoQp3W3d1sl6cStVVzUD6iCAhTo5l8s0oOwtDk1N3gxuWHtfP0vkQq4htxBvm0bBSRqEWO1hbV/pub?gid=1787340660&single=true&output=csv";
+
+document.getElementById("url-display").textContent = CSV_URL;
+
+const statusEl = document.getElementById("status");
+const thead = document.querySelector("#tbl thead");
+const tbody = document.querySelector("#tbl tbody");
+const metaEl = document.getElementById("meta");
+
+const t0 = performance.now();
+
+Papa.parse(CSV_URL, {
+  download: true,
+  header: true,
+  skipEmptyLines: true,
+  complete: function(results) {
+    const ms = Math.round(performance.now() - t0);
+
+    if (results.errors && results.errors.length) {
+      console.warn("Avisos do parser:", results.errors);
+    }
+
+    const rows = results.data;
+    const fields = results.meta.fields || [];
+
+    if (!rows.length || !fields.length) {
+      statusEl.textContent = "⚠️ Conectou, mas não veio nenhuma linha de dado. Confira o gid/link.";
+      statusEl.className = "err";
+      return;
+    }
+
+    statusEl.textContent = `✅ Conectado — ${rows.length} linhas × ${fields.length} colunas (${ms}ms)`;
+    statusEl.className = "ok";
+
+    // Cabeçalho
+    const trHead = document.createElement("tr");
+    fields.forEach(f => {
+      const th = document.createElement("th");
+      th.textContent = f;
+      trHead.appendChild(th);
+    });
+    thead.appendChild(trHead);
+
+    // Linhas (limita a 200 pra não travar o navegador em planilhas grandes)
+    const preview = rows.slice(0, 200);
+    preview.forEach(row => {
+      const tr = document.createElement("tr");
+      fields.forEach(f => {
+        const td = document.createElement("td");
+        td.textContent = row[f] ?? "";
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+
+    metaEl.textContent = rows.length > 200
+      ? `Mostrando as primeiras 200 de ${rows.length} linhas.`
+      : `${rows.length} linhas no total.`;
+  },
+  error: function(err) {
+    statusEl.textContent = "❌ Falha ao buscar/parsear o CSV: " + err.message;
+    statusEl.className = "err";
+  }
+});
+</script>
+
+</body>
+</html>
