@@ -52,59 +52,70 @@ const metaEl = document.getElementById("meta");
 
 const t0 = performance.now();
 
-Papa.parse(CSV_URL, {
-  download: true,
-  header: true,
-  skipEmptyLines: true,
-  complete: function(results) {
+function renderTable(rows, fields, ms) {
+  statusEl.textContent = `✅ Conectado — ${rows.length} linhas × ${fields.length} colunas (${ms}ms)`;
+  statusEl.className = "ok";
+
+  const trHead = document.createElement("tr");
+  fields.forEach(f => {
+    const th = document.createElement("th");
+    th.textContent = f;
+    trHead.appendChild(th);
+  });
+  thead.appendChild(trHead);
+
+  const preview = rows.slice(0, 200);
+  preview.forEach(row => {
+    const tr = document.createElement("tr");
+    fields.forEach(f => {
+      const td = document.createElement("td");
+      td.textContent = row[f] ?? "";
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+
+  metaEl.textContent = rows.length > 200
+    ? `Mostrando as primeiras 200 de ${rows.length} linhas.`
+    : `${rows.length} linhas no total.`;
+}
+
+function showFetchError(detail) {
+  statusEl.className = "err";
+  statusEl.innerHTML = `❌ Falha no fetch: ${detail}<br><small style="font-weight:400">
+    Isso normalmente é CORS — o link até baixa o CSV se você abrir direto no navegador,
+    mas o Google pode não devolver o cabeçalho Access-Control-Allow-Origin quando o pedido
+    vem de outro domínio (github.io). Próximo passo costuma ser publicar via Google Apps Script
+    Web App, que permite controlar esse cabeçalho.</small>`;
+}
+
+// Passo 1: fetch puro, só pra capturar status HTTP e headers reais
+fetch(CSV_URL, { mode: "cors" })
+  .then(resp => {
     const ms = Math.round(performance.now() - t0);
-
-    if (results.errors && results.errors.length) {
-      console.warn("Avisos do parser:", results.errors);
+    if (!resp.ok) {
+      showFetchError(`HTTP ${resp.status} (${resp.statusText}) após ${ms}ms`);
+      throw new Error("http-not-ok");
     }
-
-    const rows = results.data;
-    const fields = results.meta.fields || [];
-
+    return resp.text();
+  })
+  .then(csvText => {
+    const ms = Math.round(performance.now() - t0);
+    const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+    const rows = parsed.data;
+    const fields = parsed.meta.fields || [];
     if (!rows.length || !fields.length) {
       statusEl.textContent = "⚠️ Conectou, mas não veio nenhuma linha de dado. Confira o gid/link.";
       statusEl.className = "err";
       return;
     }
-
-    statusEl.textContent = `✅ Conectado — ${rows.length} linhas × ${fields.length} colunas (${ms}ms)`;
-    statusEl.className = "ok";
-
-    // Cabeçalho
-    const trHead = document.createElement("tr");
-    fields.forEach(f => {
-      const th = document.createElement("th");
-      th.textContent = f;
-      trHead.appendChild(th);
-    });
-    thead.appendChild(trHead);
-
-    // Linhas (limita a 200 pra não travar o navegador em planilhas grandes)
-    const preview = rows.slice(0, 200);
-    preview.forEach(row => {
-      const tr = document.createElement("tr");
-      fields.forEach(f => {
-        const td = document.createElement("td");
-        td.textContent = row[f] ?? "";
-        tr.appendChild(td);
-      });
-      tbody.appendChild(tr);
-    });
-
-    metaEl.textContent = rows.length > 200
-      ? `Mostrando as primeiras 200 de ${rows.length} linhas.`
-      : `${rows.length} linhas no total.`;
-  },
-  error: function(err) {
-    statusEl.textContent = "❌ Falha ao buscar/parsear o CSV: " + err.message;
-    statusEl.className = "err";
-  }
-});
+    renderTable(rows, fields, ms);
+  })
+  .catch(err => {
+    if (err.message === "http-not-ok") return; // já tratado acima
+    // TypeError "Failed to fetch" = bloqueio de CORS ou de rede, sem detalhe do navegador
+    showFetchError(err.message || String(err));
+  });
 </script>
 
 </body>
